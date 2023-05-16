@@ -155,6 +155,7 @@ void transform_dialect::ApplyPatternsOp::build(
   ADD_PATTERN(expandMemrefStridedMetadata,
               getExpandMemrefStridedMetadataAttrName)
   ADD_PATTERN(extractAddressComputations, getExtractAddressComputationsAttrName)
+  ADD_PATTERN(foldFlow, getFoldFlowAttrName)
   ADD_PATTERN(foldMemrefAliases, getFoldMemrefAliasesAttrName)
   ADD_PATTERN(foldReassociativeReshapes, getFoldReassociativeReshapesAttrName)
   ADD_PATTERN(foldTensorEmptyExtract, getFoldTensorEmptyExtractAttrName)
@@ -438,6 +439,10 @@ DiagnosedSilenceableFailure transform_dialect::ApplyPatternsOp::applyToOne(
     memref::populateExpandStridedMetadataPatterns(patterns);
   if (getExtractAddressComputations())
     addExtractAddressComputationsPatterns(patterns);
+  if (getFoldFlow()) {
+    Flow::populateTensorSliceOpWithDispatchTensorOpFoldingPatterns(patterns, ctx);
+    linalg::populateConvertToDestinationStylePatterns(patterns);
+  }
   if (getFoldMemrefAliases()) addFoldMemrefAliasPatterns(patterns);
   if (getFoldReassociativeReshapes()) addReassociativeReshapePatterns(patterns);
   if (getFoldTensorEmptyExtract()) addFoldTensorEmptyExtract(patterns);

@@ -1658,6 +1658,7 @@ struct FoldInsertSliceWithTensorStoreOp
         getBindingArgument(insertSliceOp.getDest());
     std::optional<BlockArgument> targetBinding =
         getBindingArgument(dispatchTensorStoreOp.getTarget());
+    
     if (!destBinding || !targetBinding ||
         destBinding.value() != targetBinding.value()) {
       return failure();
@@ -1681,6 +1682,43 @@ struct FoldInsertSliceWithTensorStoreOp
   }
 };
 
+struct FoldInsertSliceToEmptyTensorWithTensorStoreOp
+    : OpRewritePattern<IREE::Flow::DispatchTensorStoreOp> {
+  using OpRewritePattern<IREE::Flow::DispatchTensorStoreOp>::OpRewritePattern;
+
+  LogicalResult matchAndRewrite(
+      IREE::Flow::DispatchTensorStoreOp dispatchTensorStoreOp,
+      PatternRewriter &rewriter) const override {
+    auto insertSliceOp =
+        dispatchTensorStoreOp.getValue().getDefiningOp<tensor::InsertSliceOp>();
+    if (!insertSliceOp) return failure();
+
+    Value insertSliceDst = insertSliceOp.getDest();
+    auto emptyTensor = insertSliceDst.getDefiningOp<tensor::EmptyOp>();
+    if (!emptyTensor) return failure();
+
+    if (!insertSliceDst.hasOneUse()) return failure();
+
+
+    SmallVector<OpFoldResult> offsets, sizes, strides;
+    // `tensor.insert_slice` (i.e. the producer) folds **into**
+    // `flow.dispatch.tensor.store` (i.e. the consumer).
+    if (failed(affine::mergeOffsetsSizesAndStrides(
+            rewriter, dispatchTensorStoreOp->getLoc(), dispatchTensorStoreOp,
+            insertSliceOp, dispatchTensorStoreOp.getDroppedDims(), offsets,
+            sizes, strides))) {
+      return failure();
+    }
+
+    rewriter.replaceOpWithNewOp<IREE::Flow::DispatchTensorStoreOp>(
+        dispatchTensorStoreOp, insertSliceOp.getSource(),
+        dispatchTensorStoreOp.getTarget(),
+        dispatchTensorStoreOp.getTargetDims(), offsets, sizes, strides);
+    return success();
+  }
+};
+
+
 void populateFlowDispatchCanonicalizationPatterns(RewritePatternSet &results,
                                                   MLIRContext *context) {
   DispatchTensorLoadOp::getCanonicalizationPatterns(results, context);
@@ -1689,7 +1727,7 @@ void populateFlowDispatchCanonicalizationPatterns(RewritePatternSet &results,
 void populateTensorSliceOpWithDispatchTensorOpFoldingPatterns(
     mlir::RewritePatternSet &patterns, MLIRContext *context) {
   patterns
-      .insert<FoldTensorLoadWithExtractSlice, FoldInsertSliceWithTensorStoreOp>(
+      .insert<FoldTensorLoadWithExtractSlice,FoldInsertSliceToEmptyTensorWithTensorStoreOp, FoldInsertSliceWithTensorStoreOp>(
           context);
 }
 

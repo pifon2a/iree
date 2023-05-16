@@ -44,6 +44,7 @@ struct ApplyPatternsOpPatterns {
   bool eraseUnnecessaryTensorOperands = false;
   bool expandMemrefStridedMetadata = false;
   bool extractAddressComputations = false;
+  bool foldFlow = false;
   bool foldMemrefAliases = false;
   bool foldReassociativeReshapes = false;
   bool foldTensorEmptyExtract = false;
